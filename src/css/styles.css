@@ -1,0 +1,511 @@
+html,
+body {
+  height: 100%;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+nav {
+  flex: 0 0 auto;
+}
+
+#map {
+  flex: 1 1 auto;
+  height: 100%; /* This is crucial */
+  background-color: #ffffff !important;
+}
+.leaflet-panel-layers-grouplabel .leaflet-panel-layers-title {
+  font-size: 15px;
+  font-weight: bold;
+}
+
+.leaflet-panel-layers-title {
+  font-size: 14px;
+}
+
+.layer-info-img {
+  /* float: left; */
+  /* display: block; */
+  /* height: 10px; */
+  /* width: 10px; */
+  content: url(../assets/info_icon.svg);
+  cursor: help;
+  /* vertical-align:middle */
+}
+
+.leaflet-panel-layers-item .leaflet-panel-layers-title {
+  padding-left: 2px;
+  padding-right: 50px;
+  margin-bottom: 1px;
+}
+
+.leaflet-panel-layers-item label {
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  user-select: none;
+}
+
+.leaflet-panel-layers {
+  grid-row: 2;
+  background: aqua;
+  border-radius: 5px;
+  border: 2px solid rgba(0, 0, 0, 0.2);
+  padding: 10px;
+  box-shadow: 0 0 #0000004d;
+}
+
+.leaflet-panel-layers-selector {
+  float: right;
+  margin-right: 3px;
+  cursor: pointer;
+}
+
+.leaflet-panel-layers-group.collapsible .leaflet-panel-layers-icon:first-child {
+  min-width: 20px;
+  font-size: 40px;
+  font-weight: bold;
+}
+
+.tooltip {
+  position: relative;
+  display: inline-block;
+  border-bottom: 1px dotted black;
+}
+
+summary {
+  display: block;
+  list-style: none;
+}
+
+/* Create a new custom triangle on the right side */
+/* summary::after {
+  margin-left: 1ch;
+  display: inline-block;
+  content: ">>";
+  /* content: '▶️'; */
+
+/* content: url('../assets/right_arrow_icon.svg'); */
+/* transition: 0.3s; */
+/* }
+
+details[open] > summary::after {
+  transform: rotate(90deg);
+} */
+
+details > img {
+  padding-left: 10%;
+  /* width: 50px; */
+}
+
+/* details > summary {
+    list-style: none;
+
+  }
+   */
+
+/* Style buttons */
+.Zoombtn {
+  background: transparent;
+  /* border: none; Remove borders */
+  /* color: black; White text */
+  /* padding: 2px 2px; Some padding */
+  /* font-size: 5px; Set a font size */
+  /* cursor: pointer; Mouse pointer on hover */
+  /* height: 40px; */
+  width: 30px;
+  border: none;
+  padding: none;
+  background: none;
+  outline: none;
+  box-shadow: none;
+  outline-style: none;
+  cursor: pointer;
+}
+
+/* Darker background on mouse-over */
+.Zoombtn:hover {
+  /* border: RoyalBlue; */
+  transform: scale(1.4);
+  padding: none;
+}
+
+.Zoombtn:focus {
+  box-shadow: none;
+  background: none;
+  outline: none;
+  box-shadow: none;
+  outline-style: none;
+}
+
+/* protected area legend */
+summary #Naturschutzgebiete {
+  margin-right: 2px;
+  width: 16px;
+  height: 11px;
+  background: red;
+  display: inline-block;
+  opacity: 0.7;
+}
+
+summary #Landschaftsschutzgebiete {
+  margin-right: 2px;
+  width: 16px;
+  height: 11px;
+  background: #408080;
+  display: inline-block;
+  opacity: 0.7;
+}
+summary #Naturdenkmale {
+  margin-right: 2px;
+  width: 10px; /* Make width = height for a circle */
+  height: 10px;
+  background: #00cc00;
+  display: inline-block;
+  opacity: 0.9;
+  border: 1px solid #333;
+
+  border-radius: 50%; /* This makes it a circle */
+}
+
+summary #FFH-Gebiet {
+  margin-right: 2px;
+  width: 16px;
+  height: 11px;
+  background: #ff8040;
+  display: inline-block;
+  opacity: 0.7;
+}
+
+summary #Vogelschutzgebiet {
+  margin-right: 2px;
+  width: 16px;
+  height: 11px;
+  background: #8000ff;
+  display: inline-block;
+  opacity: 0.7;
+}
+summary #Naturepark {
+  margin-right: 2px;
+  width: 16px;
+  height: 11px;
+  background: #808000;
+  display: inline-block;
+  opacity: 0.7;
+}
+
+summary #Wasserschutzgebiete {
+  margin-right: 2px;
+  width: 16px;
+  height: 11px;
+  background: #ed29a4;
+  display: inline-block;
+  opacity: 0.7;
+}
+
+/* protected area legend */
+summary #Powerline_380kv {
+  margin-right: 2px;
+
+  width: 16px;
+  height: 4px;
+  background: red;
+  display: inline-block;
+  opacity: 0.7;
+}
+/* protected area legend */
+summary #Powerline_110kv {
+  margin-right: 2px;
+
+  width: 16px;
+  height: 4px;
+  background: blue;
+  display: inline-block;
+  opacity: 0.7;
+}
+
+/* protected area legend */
+summary #RailwayLines {
+  margin-right: 2px;
+
+  width: 16px;
+  height: 4px;
+  background: #408080;
+  display: inline-block;
+  opacity: 0.7;
+}
+
+/* --- Pipeline: Gas --- */
+summary #pipeline_gas::before {
+  content: "";
+  display: inline-block;
+  width: 30px;
+  height: 4px;
+  background: repeating-linear-gradient(
+    to right,
+    #ff8040,
+    #ff8040 6px,
+    transparent 6px,
+    transparent 12px
+  );
+  border-radius: 2px;
+  margin-right: 6px;
+  opacity: 0.85;
+  vertical-align: middle;
+}
+
+/* --- Pipeline: Chemicals --- */
+summary #pipeline_chemicals::before {
+  content: "";
+  display: inline-block;
+  width: 30px;
+  height: 4px;
+  background: repeating-linear-gradient(
+    to right,
+    #9900cc,
+    #9900cc 6px,
+    transparent 6px,
+    transparent 12px
+  );
+  border-radius: 2px;
+  margin-right: 6px;
+  opacity: 0.85;
+  vertical-align: middle;
+}
+
+/* --- Pipeline: Oil --- */
+summary #pipeline_oil::before {
+  content: "";
+  display: inline-block;
+  width: 30px;
+  height: 4px;
+  background: repeating-linear-gradient(
+    to right,
+    #cc0000,
+    #cc0000 6px,
+    transparent 6px,
+    transparent 12px
+  );
+  border-radius: 2px;
+  margin-right: 6px;
+  opacity: 0.85;
+  vertical-align: middle;
+}
+
+summary div[id^="pipeline_"],
+summary #wind_turbines {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+summary #wind_turbines::before {
+  content: "";
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  background-image: url("wind-turbine.svg"); /* same folder as CSS */
+  background-size: contain;
+  background-repeat: no-repeat;
+  margin-right: 4px;
+  opacity: 0.9;
+  vertical-align: middle;
+}
+/* Shared legend style for seismic lines */
+/* Inline layout for seismic legend rows */
+summary #DOW_Seismic,
+summary #LIAG_Seismic_2D,
+summary #LIAG_Seismic_3D {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Black horizontal line symbol */
+summary #DOW_Seismic::before,
+summary #LIAG_Seismic_2D::before,
+summary #LIAG_Seismic_3D::before {
+  content: "";
+  display: inline-block;
+  width: 30px;
+  height: 2px;
+  background-color: black;
+  margin-right: 4px;
+  opacity: 1;
+  vertical-align: middle;
+}
+
+summary #Target\ area {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Circle with stroke only */
+summary #Target\ area::before {
+  content: "";
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border: 2px solid black; /* stroke */
+  border-radius: 50%; /* circle shape */
+  background: none; /* no fill */
+  margin-right: 4px;
+  vertical-align: middle;
+}
+/* Shared layout for all Heli Flights */
+summary #Flight_1,
+summary #Flight_2,
+summary #Flight_3,
+summary #Flight_4 {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Colored square symbols with stroke for each */
+summary #Flight_1::before {
+  content: "";
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  background-color: #ff0000;
+  border: 1px solid black;
+  margin-right: 4px;
+  opacity: 0.4;
+}
+
+summary #Flight_2::before {
+  content: "";
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  background-color: #00cc00;
+  border: 1px solid black;
+  margin-right: 4px;
+  opacity: 0.4;
+}
+
+summary #Flight_3::before {
+  content: "";
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  background-color: #0066ff;
+  border: 1px solid black;
+  margin-right: 4px;
+  opacity: 0.4;
+}
+
+summary #Flight_4::before {
+  content: "";
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  background-color: #ff9900;
+  border: 1px solid black;
+  margin-right: 4px;
+  opacity: 0.4;
+}
+
+/* Layout */
+summary #Transmitter\ 1,
+summary #Transmitter\ 2,
+summary #Transmitter\ 3,
+summary #Transmitter\ 4 {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Line with shadow */
+summary #Transmitter\ 1::before {
+  content: "";
+  display: inline-block;
+  width: 30px;
+  height: 2px;
+  background-color: #ff0000;
+  margin-right: 4px;
+  opacity: 0.8;
+  box-shadow: 0 0 3px rgba(0, 0, 0, 0.5);
+}
+
+summary #Transmitter\ 2::before {
+  content: "";
+  display: inline-block;
+  width: 30px;
+  height: 2px;
+  background-color: #00cc00;
+  margin-right: 4px;
+  opacity: 0.8;
+  box-shadow: 0 0 3px rgba(0, 0, 0, 0.5);
+}
+
+summary #Transmitter\ 3::before {
+  content: "";
+  display: inline-block;
+  width: 30px;
+  height: 2px;
+  background-color: #0066ff;
+  margin-right: 4px;
+  opacity: 0.8;
+  box-shadow: 0 0 3px rgba(0, 0, 0, 0.5);
+}
+
+summary #Transmitter\ 4::before {
+  content: "";
+  display: inline-block;
+  width: 30px;
+  height: 2px;
+  background-color: #ff9900;
+  margin-right: 4px;
+  opacity: 0.8;
+  box-shadow: 0 0 3px rgba(0, 0, 0, 0.5);
+}
+
+.heli-shadow {
+  filter: drop-shadow(1px 1px 2px rgba(0, 0, 0, 0.5));
+}
+
+/* Layout */
+summary #FTMG_100m {
+  content: "";
+  display: inline-block;
+  width: 30px;
+  height: 2px;
+  background-color: #000000;
+  margin-right: 4px;
+  opacity: 0.8;
+}
+/* Layout */
+summary #sAEM_Area1 {
+  content: "";
+  display: inline-block;
+  width: 30px;
+  height: 2px;
+  background-color: #ff0000;
+  margin-right: 4px;
+  opacity: 0.8;
+}
+/* Layout */
+summary #sAEM_Area2 {
+  content: "";
+  display: inline-block;
+  width: 30px;
+  height: 2px;
+  background-color: #00cc00;
+  margin-right: 4px;
+  opacity: 0.8;
+}
+/* Layout */
+summary #sAEM_Area3 {
+  content: "";
+  display: inline-block;
+  width: 30px;
+  height: 2px;
+  background-color: #0066ff;
+  margin-right: 4px;
+  opacity: 0.8;
+}
