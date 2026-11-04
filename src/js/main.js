@@ -219,6 +219,41 @@ function makeFlightLayer(id) {
     };
 }
 
+function makeWaterPipelineLayer() {
+    return {
+        active: false,
+        short_name: "Water pipeline",
+        legend: "",
+        name: getfullName("Water pipeline", ''),
+        layer: L.geoJSON(water, {
+            style: {
+                color: '#0077cc',
+                weight: 3,
+                opacity: 0.9
+            },
+            onEachFeature: bindFilteredPopup
+        })
+    };
+}
+
+
+function makeTelekomCableLayer() {
+    return {
+        active: false,
+        short_name: "Telekom cable",
+        legend: "",
+        name: getfullName("Telekom cable", ''),
+        layer: L.geoJSON(telekom, {
+            style: {
+                color: '#e6007e',
+                weight: 3,
+                opacity: 0.9
+            },
+            onEachFeature: bindFilteredPopup
+        })
+    };
+}
+
 var overLayers = [
     {
         group: "SAEM Transmitters",
@@ -229,6 +264,14 @@ var overLayers = [
         group: "SAEM Flights",
         collapsed: false,
         layers: [1, 2, 3, 4, 5, 6].map(id => makeFlightLayer(id))
+    },
+    {
+        group: "Infrastructure",
+        collapsed: false,
+        layers: [
+            makeWaterPipelineLayer(),
+            makeTelekomCableLayer()
+        ]
     }
 ];
 
