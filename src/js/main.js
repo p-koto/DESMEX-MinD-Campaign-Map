@@ -254,6 +254,23 @@ function makeTelekomCableLayer() {
     };
 }
 
+function makeGasPipelineLayer() {
+    return {
+        active: false,
+        short_name: "Gas pipeline",
+        legend: "",
+        name: getfullName("Gas pipeline", ''),
+        layer: L.geoJSON(gas, {
+            style: {
+                color: '#d10c0c',
+                weight: 3,
+                opacity: 0.9
+            },
+            onEachFeature: bindFilteredPopup
+        })
+    };
+}
+
 var overLayers = [
     {
         group: "SAEM Transmitters",
@@ -270,7 +287,8 @@ var overLayers = [
         collapsed: false,
         layers: [
             makeWaterPipelineLayer(),
-            makeTelekomCableLayer()
+            makeTelekomCableLayer(),
+            makeGasPipelineLayer()
         ]
     }
 ];
@@ -299,6 +317,114 @@ var panelLayers = new L.Control.PanelLayers(null, overLayers, {
 nestGroupsUnder(panelLayers, "Erzgebirge: Gottesberg", false);
 
 
+
+// ---------- KML-Export ----------
+function escXml(s) {
+    return String(s)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+// GeoJSON-Koordinaten [lon, lat] -> KML "lon,lat,0"
+function coordsToKml(coords) {
+    return coords.map(c => `${c[0]},${c[1]},${c[2] || 0}`).join(' ');
+}
+
+function geometryToKml(g) {
+    switch (g.type) {
+        case 'Point':
+            return `<Point><coordinates>${coordsToKml([g.coordinates])}</coordinates></Point>`;
+        case 'LineString':
+            return `<LineString><tessellate>1</tessellate><coordinates>${coordsToKml(g.coordinates)}</coordinates></LineString>`;
+        case 'Polygon':
+            return g.coordinates.map((ring, i) => {
+                const tag = i === 0 ? 'outerBoundaryIs' : 'innerBoundaryIs';
+                return `<${tag}><LinearRing><coordinates>${coordsToKml(ring)}</coordinates></LinearRing></${tag}>`;
+            }).reduce((acc, s) => acc + s, '<Polygon><tessellate>1</tessellate>') + '</Polygon>';
+        case 'MultiPoint':
+        case 'MultiLineString':
+        case 'MultiPolygon': {
+            const single = g.type.replace('Multi', '');
+            return '<MultiGeometry>' +
+                g.coordinates.map(c => geometryToKml({ type: single, coordinates: c })).join('') +
+                '</MultiGeometry>';
+        }
+        case 'GeometryCollection':
+            return '<MultiGeometry>' + g.geometries.map(geometryToKml).join('') + '</MultiGeometry>';
+        default:
+            return '';
+    }
+}
+
+function geojsonToKml(geojson, docName) {
+    const placemarks = geojson.features.map((f, i) => {
+        const p = f.properties || {};
+        const name = p.Name || p.name || `${docName}_${i + 1}`;
+        const extData = Object.entries(p)
+            .filter(([_, v]) => v !== null && v !== undefined && v !== '')
+            .map(([k, v]) => `<Data name="${escXml(k)}"><value>${escXml(v)}</value></Data>`)
+            .join('');
+        return `<Placemark><name>${escXml(name)}</name>` +
+            `<ExtendedData>${extData}</ExtendedData>` +
+            `${geometryToKml(f.geometry)}</Placemark>`;
+    }).join('\n');
+
+    return `<?xml version="1.0" encoding="UTF-8"?>\n` +
+        `<kml xmlns="http://www.opengis.net/kml/2.2">\n<Document>\n` +
+        `<name>${escXml(docName)}</name>\n${placemarks}\n</Document>\n</kml>`;
+}
+
+function downloadKml(layerEntry) {
+    const fileName = 'Erzgebirge_Gottesberg_' + layerEntry.short_name.replace(/\s+/g, '');
+    const kml = geojsonToKml(layerEntry.layer.toGeoJSON(), fileName);
+    const blob = new Blob([kml], { type: 'application/vnd.google-earth.kml+xml' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = fileName + '.kml';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+}
+
+// Leaflet-Control: Dropdown (nach Rubrik gruppiert) + Download-Button
+L.Control.KmlDownload = L.Control.extend({
+    options: { position: 'topright' },
+
+    onAdd: function () {
+        const div = L.DomUtil.create('div', 'leaflet-bar kml-download');
+        div.style.cssText = 'background:#fff;padding:6px;display:flex;gap:4px;align-items:center;';
+
+        const select = L.DomUtil.create('select', '', div);
+        overLayers.forEach((group, gi) => {
+            const og = document.createElement('optgroup');
+            og.label = group.group;
+            group.layers.forEach((l, li) => {
+                const opt = document.createElement('option');
+                opt.value = gi + ':' + li;
+                opt.textContent = l.short_name;
+                og.appendChild(opt);
+            });
+            select.appendChild(og);
+        });
+
+        const btn = L.DomUtil.create('button', '', div);
+        btn.type = 'button';
+        btn.title = 'Als KML herunterladen';
+        btn.innerHTML = '<i class="fa fa-download"></i> KML';
+
+        btn.onclick = () => {
+            const [gi, li] = select.value.split(':').map(Number);
+            downloadKml(overLayers[gi].layers[li]);
+        };
+
+        L.DomEvent.disableClickPropagation(div);
+        return div;
+    }
+});
+
+map.addControl(new L.Control.KmlDownload());
 
 
 // map.addControl(panelLayers);
