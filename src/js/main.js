@@ -1,4 +1,3 @@
-
 var map = L.map('map', {
     zoom: 12,
     center: L.latLng([50.4365, 12.5223]),
@@ -48,10 +47,8 @@ var notification = L.control
 
 L.Control.geocoder({ position: "topleft", showResultIcons: true }).addTo(map);
 
-// notification.success('Success', 'Data loaded');
-
 L.Control.betterFileLayer({
-    fileSizeLimit: 60240, // File size limit in kb (10 MB))
+    fileSizeLimit: 60240, // File size limit in kb
 }).addTo(map);
 
 
@@ -103,8 +100,6 @@ map.on("bfl:layerisempty", function () { notification.warning('Error', 'No featu
 map.on("bfl:filesizelimit", function () { notification.alert('Error', 'Maximun file size allowed is 50 MB'); })
 
 
-
-
 osmLayer = new L.TileLayer('https://tile.openstreetmap.de/{z}/{x}/{y}.png', {
     maxZoom: 18,
     attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
@@ -118,7 +113,6 @@ OpenTopoMap = L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
 
 Esri_WorldImagery = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
     attribution: 'Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community',
-
 });
 
 
@@ -133,152 +127,169 @@ for (var providerId in providers) {
 }
 var ctrl = L.control.iconLayers(layers).addTo(map);
 
-// var layerControl = L.control.layers({ "osmLayer": osmLayer }, []).addTo(map);
-// layerControl.addBaseLayer(osmLayer, "osmLayer");
-
-var baseLayers = [
-    //     {
-    //         group: "Base Layers",
-    //         collapsed: true,
-    //         icon: '<span class="fa fa-solid fa-bars"></span>',
-    //         layers: [
-    //             {
-    //                 name: getfullName("Open Street Map", "", osmLayer.getAttribution()),
-    //                 layer: osmLayer,
-    //                 active: true,
-    //                 zIndex: 0,
-    //             },
-    //             {
-    //                 name: getfullName("Open Topo Map", " ", OpenTopoMap.getAttribution()),
-    //                 layer: OpenTopoMap,
-    //                 zIndex: 0,
-
-    //             },
-    //             {
-    //                 name: getfullName("Google Hybrid", " ", googleHybrid.getAttribution()),
-    //                 layer: googleHybrid,
-    //                 zIndex: 0,
-    //             },
-    //             {
-    //                 name: getfullName("Esri World Imagery", " ", Esri_WorldImagery.getAttribution()),
-    //                 layer: Esri_WorldImagery,
-    //                 zIndex: 0,
-    //             },
-
-    //         ],
-    //     },
-]
+var baseLayers = [];
 
 
 const windTurbineIcon = L.icon({
     iconUrl: './src/assets/wind-turbine.svg',
-    iconSize: [30, 30],           // adjust size as needed
-    iconAnchor: [15, 30],         // point of the icon which will correspond to marker's location
-    popupAnchor: [0, -30]         // where the popup opens relative to the iconAnchor
+    iconSize: [30, 30],
+    iconAnchor: [15, 30],
+    popupAnchor: [0, -30]
 });
 map.createPane('topLayerPane');
 map.getPane('topLayerPane').style.zIndex = 999;
 
 
-function makeTxLayer(id) {
-    return {
-        active: true,
-        short_name: "Tx" + id,
-        legend: "",
-        name: getfullName("Tx" + id, ''),
-        layer: L.geoJSON(transmitters, {
-            pane: 'topLayerPane',
-            filter: f => f.properties.id === id,
-            style: {
-                className: 'heli-shadow',
-                color: '#000000',
-                weight: id === 1 ? 5 : 4,
-                opacity: 0.8
-            },
-            onEachFeature: bindFilteredPopup
+
+function loadKmlInto(layer, url) {
+    return fetch(url)
+        .then(r => {
+            if (!r.ok) throw new Error(r.status + ' ' + url);
+            return r.text();
         })
+        .then(txt => {
+            const xml = new DOMParser().parseFromString(txt, 'text/xml');
+            layer.addData(toGeoJSON.kml(xml));
+        })
+        .catch(err => console.warn('KML konnte nicht geladen werden:', err));
+}
+
+const DATA_DIR  = 'data/AP2_Erzgebirge/A_Gottesberg/';
+const FILE_BASE = 'Erzgebirge_Gottesberg_';
+
+function makeKmlEntry({ file, label, style, pane, active = true }) {
+    const layer = L.geoJSON(null, {
+        ...(pane && { pane }),
+        style,
+        onEachFeature: bindFilteredPopup
+    });
+
+    const url = `${DATA_DIR}${FILE_BASE}${file}.kml`;
+    loadKmlInto(layer, url);
+
+    return {
+        active,
+        short_name: label,
+        legend: "",
+        name: getfullName(label, ''),
+        layer,
+        url
     };
 }
+
+// KML-Farbe (aabbggrr) -> CSS-Farbe + Deckkraft
+function kmlColorToCss(kmlColor) {
+    const c = (kmlColor || '').trim();
+    if (c.length !== 8) return { color: '#3388ff', opacity: 1 };
+    return {
+        color: '#' + c.slice(6, 8) + c.slice(4, 6) + c.slice(2, 4),
+        opacity: parseInt(c.slice(0, 2), 16) / 255
+    };
+}
+
+// Punkt-KML mit Farben pro Placemark laden
+function loadKmlPointsInto(layerGroup, url, radius) {
+    return fetch(url)
+        .then(r => {
+            if (!r.ok) throw new Error(r.status + ' ' + url);
+            return r.text();
+        })
+        .then(txt => {
+            const xml = new DOMParser().parseFromString(txt, 'text/xml');
+            const placemarks = xml.getElementsByTagName('Placemark');
+
+            for (const pm of placemarks) {
+                const coordNode = pm.getElementsByTagName('coordinates')[0];
+                if (!coordNode) continue;
+                const [lon, lat] = coordNode.textContent.trim().split(',').map(Number);
+                if (isNaN(lon) || isNaN(lat)) continue;
+
+                const colorNode = pm.getElementsByTagName('color')[0];
+                const { color, opacity } = kmlColorToCss(colorNode && colorNode.textContent);
+
+                const marker = L.circleMarker([lat, lon], {
+                    radius: radius,
+                    color: color,
+                    fillColor: color,
+                    fillOpacity: opacity,
+                    opacity: opacity,
+                    weight: 1
+                });
+
+                const descNode = pm.getElementsByTagName('description')[0];
+                const desc = descNode && descNode.textContent.trim();
+                if (desc) marker.bindPopup(desc);
+
+                layerGroup.addLayer(marker);
+            }
+        })
+        .catch(err => console.warn('KML konnte nicht geladen werden:', err));
+}
+
 
 function makeFlightLayer(id) {
-    return {
-        active: true,
-        short_name: "F" + id,
-        legend: "",
-        name: getfullName("F" + id, ''),
-        layer: L.geoJSON(flights, {
-            filter: f => f.properties.id === id,
-            style: {
-                color: 'black',
-                weight: 1.5,
-                fillColor: id === 1 ? '#ff0000' : '#000000',
-                fillOpacity: 0.2
-            },
-            onEachFeature: bindFilteredPopup
-        })
-    };
+    return makeKmlEntry({
+        file: 'F' + id,
+        label: 'F' + id,
+        style: {
+            color: 'black',
+            weight: 1.5,
+            fillColor: id === 1 ? '#ff0000' : '#000000',
+            fillOpacity: 0.2
+        }
+    });
 }
+
+function makeTxLayer(id) {
+    return makeKmlEntry({
+        file: 'Tx' + id,
+        label: 'Tx' + id,
+        pane: 'topLayerPane',
+        style: {
+            className: 'heli-shadow',
+            color: '#000000',
+            weight: id === 1 ? 5 : 4,
+            opacity: 0.8
+        }
+    });
+}
+
 
 function makeWaterPipelineLayer() {
-    return {
+    return makeKmlEntry({
+        file: 'Waterpipeline',
+        label: 'Water pipeline',
         active: false,
-        short_name: "Water pipeline",
-        legend: "",
-        name: getfullName("Water pipeline", ''),
-        layer: L.geoJSON(water, {
-            style: {
-                color: '#0077cc',
-                weight: 3,
-                opacity: 0.9
-            },
-            onEachFeature: bindFilteredPopup
-        })
-    };
+        style: { color: '#0077cc', weight: 3, opacity: 0.9 }
+    });
 }
 
-
 function makeTelekomCableLayer() {
-    return {
+    return makeKmlEntry({
+        file: 'Telekomcable',
+        label: 'Telekom cable',
         active: false,
-        short_name: "Telekom cable",
-        legend: "",
-        name: getfullName("Telekom cable", ''),
-        layer: L.geoJSON(telekom, {
-            style: {
-                color: '#e6007e',
-                weight: 3,
-                opacity: 0.9
-            },
-            onEachFeature: bindFilteredPopup
-        })
-    };
+        style: { color: '#e6007e', weight: 3, opacity: 0.9 }
+    });
 }
 
 function makeGasPipelineLayer() {
-    return {
+    return makeKmlEntry({
+        file: 'Gaspipeline',
+        label: 'Gas pipeline',
         active: false,
-        short_name: "Gas pipeline",
-        legend: "",
-        name: getfullName("Gas pipeline", ''),
-        layer: L.geoJSON(gas, {
-            style: {
-                color: '#d10c0c',
-                weight: 3,
-                opacity: 0.9
-            },
-            onEachFeature: bindFilteredPopup
-        })
-    };
+        style: { color: '#d10c0c', weight: 3, opacity: 0.9 }
+    });
 }
 
 var overLayers = [
     {
-        group: "SAEM Transmitters",
+        group: "EM Transmitters",
         collapsed: false,
         layers: [1, 2, 3, 4, 5, 6].map(id => makeTxLayer(id))
     },
     {
-        group: "SAEM Flights",
+        group: "Flights",
         collapsed: false,
         layers: [1, 2, 3, 4, 5, 6].map(id => makeFlightLayer(id))
     },
@@ -295,22 +306,16 @@ var overLayers = [
 
 
 var panelLayersBase = new L.Control.PanelLayers(baseLayers, null, {
-    // selectorGroup: true,
     collapsibleGroups: true,
     compact: true,
     position: 'bottomright',
-    compact: true,
     autoZIndex: false,
-
 }).addTo(map);
 
 var panelLayers = new L.Control.PanelLayers(null, overLayers, {
     selectorGroup: true,
     collapsibleGroups: true,
     compact: true,
-    // title: 'All layers',
-    //collapsed: true,
-    // title: "Layers",
     position: 'topright',
 }).addTo(map);
 
@@ -318,74 +323,114 @@ nestGroupsUnder(panelLayers, "Erzgebirge: Gottesberg", false);
 
 
 
-// ---------- KML-Export ----------
-function escXml(s) {
-    return String(s)
-        .replace(/&/g, '&amp;').replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-}
+// ---------- TFE-Menü (Flug -> Komponente -> Frequenz -> Anzeige) ----------
+const TFE_DIR = DATA_DIR + 'TFEs/';
 
-// GeoJSON-Koordinaten [lon, lat] -> KML "lon,lat,0"
-function coordsToKml(coords) {
-    return coords.map(c => `${c[0]},${c[1]},${c[2] || 0}`).join(' ');
-}
+// Dateinamen-Schema: Flug_Komponente_Frequenz_Anzeige.kml
+const tfeFiles = [
+    'F1_BN_8Hz_abs.kml',
+    'F1_BE_8Hz_abs.kml',
+    'F1_BN_8Hz_phase.kml',
+    'F3A_BN_8Hz_abs.kml',
+    'F3A_BE_8Hz_abs.kml',
+    'F3A_BD_8Hz_abs.kml',
+    // ... weitere Dateien
+];
 
-function geometryToKml(g) {
-    switch (g.type) {
-        case 'Point':
-            return `<Point><coordinates>${coordsToKml([g.coordinates])}</coordinates></Point>`;
-        case 'LineString':
-            return `<LineString><tessellate>1</tessellate><coordinates>${coordsToKml(g.coordinates)}</coordinates></LineString>`;
-        case 'Polygon':
-            return g.coordinates.map((ring, i) => {
-                const tag = i === 0 ? 'outerBoundaryIs' : 'innerBoundaryIs';
-                return `<${tag}><LinearRing><coordinates>${coordsToKml(ring)}</coordinates></LinearRing></${tag}>`;
-            }).reduce((acc, s) => acc + s, '<Polygon><tessellate>1</tessellate>') + '</Polygon>';
-        case 'MultiPoint':
-        case 'MultiLineString':
-        case 'MultiPolygon': {
-            const single = g.type.replace('Multi', '');
-            return '<MultiGeometry>' +
-                g.coordinates.map(c => geometryToKml({ type: single, coordinates: c })).join('') +
-                '</MultiGeometry>';
+const tfeLayers = {};   // Dateiname -> L.layerGroup
+
+function toggleTfe(file, on) {
+    let layer = tfeLayers[file];
+    if (on) {
+        if (!layer) {
+            layer = tfeLayers[file] = L.layerGroup();
+            loadKmlPointsInto(layer, TFE_DIR + file, 5);   // lädt erst beim ersten Mal
         }
-        case 'GeometryCollection':
-            return '<MultiGeometry>' + g.geometries.map(geometryToKml).join('') + '</MultiGeometry>';
-        default:
-            return '';
+        layer.addTo(map);
+    } else if (layer) {
+        map.removeLayer(layer);
     }
 }
 
-function geojsonToKml(geojson, docName) {
-    const placemarks = geojson.features.map((f, i) => {
-        const p = f.properties || {};
-        const name = p.Name || p.name || `${docName}_${i + 1}`;
-        const extData = Object.entries(p)
-            .filter(([_, v]) => v !== null && v !== undefined && v !== '')
-            .map(([k, v]) => `<Data name="${escXml(k)}"><value>${escXml(v)}</value></Data>`)
-            .join('');
-        return `<Placemark><name>${escXml(name)}</name>` +
-            `<ExtendedData>${extData}</ExtendedData>` +
-            `${geometryToKml(f.geometry)}</Placemark>`;
-    }).join('\n');
-
-    return `<?xml version="1.0" encoding="UTF-8"?>\n` +
-        `<kml xmlns="http://www.opengis.net/kml/2.2">\n<Document>\n` +
-        `<name>${escXml(docName)}</name>\n${placemarks}\n</Document>\n</kml>`;
+function buildTfeTree(files) {
+    const tree = {};
+    files.forEach(file => {
+        const parts = file.replace(/\.kml$/i, '').split('_');
+        if (parts.length !== 4) {
+            console.warn('TFE-Dateiname passt nicht zum Schema:', file);
+            return;
+        }
+        const [flight, comp, freq, disp] = parts;
+        ((tree[flight] ??= {})[comp] ??= {})[freq] ??= {};
+        tree[flight][comp][freq][disp] = file;
+    });
+    return tree;
 }
 
+const natSort = (a, b) => a.localeCompare(b, undefined, { numeric: true });
+
+function makeTfeGroup(title, childEls) {
+    const d = document.createElement('details');
+    const s = document.createElement('summary');
+    s.textContent = title;
+    s.style.cursor = 'pointer';
+    d.appendChild(s);
+    const inner = document.createElement('div');
+    inner.style.marginLeft = '12px';
+    childEls.forEach(el => inner.appendChild(el));
+    d.appendChild(inner);
+    return d;
+}
+
+function makeTfeToggle(label, file) {
+    const l = document.createElement('label');
+    l.style.display = 'block';
+    const cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.addEventListener('change', () => toggleTfe(file, cb.checked));
+    l.append(cb, ' ' + label);
+    return l;
+}
+
+function buildTfeMenu(files) {
+    const tree = buildTfeTree(files);
+    const keys = o => Object.keys(o).sort(natSort);
+
+    const flights = keys(tree).map(flight =>
+        makeTfeGroup(flight, keys(tree[flight]).map(comp =>
+            makeTfeGroup(comp, keys(tree[flight][comp]).map(freq =>
+                makeTfeGroup(freq, keys(tree[flight][comp][freq]).map(disp =>
+                    makeTfeToggle(disp, tree[flight][comp][freq][disp])
+                ))
+            ))
+        ))
+    );
+
+    const root = makeTfeGroup('TFEs', flights);
+    root.className = 'tfe-menu';
+    root.querySelector('summary').style.fontWeight = 'bold';
+    return root;
+}
+
+// TFE-Menü in den verschachtelten Block hängen (mit Fallback)
+(function () {
+    const tfeMenu = buildTfeMenu(tfeFiles);
+    const container = panelLayers.getContainer();
+    const target = container.querySelector('.nested-group-body') || container;
+    target.appendChild(tfeMenu);
+    L.DomEvent.disableClickPropagation(tfeMenu);
+})();
+
+
+
+// ---------- KML-Download ----------
 function downloadKml(layerEntry) {
-    const fileName = 'Erzgebirge_Gottesberg_' + layerEntry.short_name.replace(/\s+/g, '');
-    const kml = geojsonToKml(layerEntry.layer.toGeoJSON(), fileName);
-    const blob = new Blob([kml], { type: 'application/vnd.google-earth.kml+xml' });
-    const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
-    a.href = url;
-    a.download = fileName + '.kml';
+    a.href = layerEntry.url;
+    a.download = layerEntry.url.split('/').pop();   // z. B. Erzgebirge_Gottesberg_F1.kml
     document.body.appendChild(a);
     a.click();
     a.remove();
-    URL.revokeObjectURL(url);
 }
 
 // Leaflet-Control: Dropdown (nach Rubrik gruppiert) + Download-Button
@@ -427,9 +472,6 @@ L.Control.KmlDownload = L.Control.extend({
 map.addControl(new L.Control.KmlDownload());
 
 
-// map.addControl(panelLayers);
-
-
 
 function bindFilteredPopup(feature, layer) {
     if (feature.properties) {
@@ -449,12 +491,12 @@ function bindFilteredPopup(feature, layer) {
 function nestGroupsUnder(control, title, startCollapsed) {
     var container = control.getContainer();
     var groups = container.querySelectorAll('.leaflet-panel-layers-group');
- 
+
     if (!groups.length) {
         console.warn('nestGroupsUnder: keine .leaflet-panel-layers-group gefunden');
         return;
     }
- 
+
     // Styles einmalig einfügen
     if (!document.getElementById('nested-group-style')) {
         var style = document.createElement('style');
@@ -467,19 +509,19 @@ function nestGroupsUnder(control, title, startCollapsed) {
             '.nested-group-body { margin-left: 12px; }';
         document.head.appendChild(style);
     }
- 
+
     var details = document.createElement('details');
     details.className = 'nested-group';
     details.open = !startCollapsed;
- 
+
     var summary = document.createElement('summary');
     summary.textContent = title;
     details.appendChild(summary);
- 
+
     var body = document.createElement('div');
     body.className = 'nested-group-body';
     details.appendChild(body);
- 
+
     // Obergruppe an die Stelle der ersten Untergruppe setzen,
     // dann alle Untergruppen hineinverschieben
     groups[0].parentNode.insertBefore(details, groups[0]);
@@ -493,99 +535,13 @@ document.querySelectorAll('.leaflet-panel-layers-item label').forEach(label => {
 
         // Prevent double toggle if clicking the checkbox directly
         if (checkbox && e.target !== checkbox) {
-            checkbox.click(); // use .click() instead of changing checked state
+            checkbox.click();
         }
     });
 });
 
-// swipeMenuInnerHTML = '<select class="form-select" multiple  size="5"  aria-label="form-select" id="LeftLayerSelector"></select><div><button type="button" class="btn btn-success" id="confirm">Add swipe</button>   <button type="button" class="btn btn-secondary" id="closeSide">Remove all</button></div>'
-
-
-// L.control.slideMenu(swipeMenuInnerHTML, { position: bottomright, menuposition: bottomright }).addTo(map);
-
-// L.control.slideMenu(swipeMenuInnerHTML, { position: bottomright }).addTo(map);
-
-// // var slideMenu = L.control.slideMenu("", {
-
-// //     width: "25%",
-// //     height: "100%",
-// //     delay: 10,
-// //     icon: "fa fa-solid fa-bars",
-// // })
-// //     .addTo(map);
-
-// // slideMenu.setContents(swipeMenuInnerHTML);
-
-// // document.getElementById("confirm").addEventListener("click", addSideBySide);
-// // document.getElementById("closeSide").addEventListener("click", removeSideBySide);
-// // document.getElementById("ZoomTo").addEventListener("click", ZoomToLayer);
-
-// var isSideBySideOn = null
-
-// function addSideBySide() {
-//     if (isSideBySideOn == null) {
-//         isSideBySideOn = L.control.sideBySide([], [], { thumbSize: 25, padding: 70 }).addTo(map);
-//         isSideBySideOn.setLeftLayers(overLayers[2].layers[0].layer)
-//         // isSideBySideOn.setLeftLayers(overLayers[2].layers[0].layer)
-//         // isSideBySideOn.setRightLayers(osmLayer)
-
-//     }
-// }
-
-// function removeSideBySide() {
-//     if (isSideBySideOn) {
-//         isSideBySideOn.remove()
-//         isSideBySideOn = null
-//     }
-// }
-
-
-// function ZoomToLayer(name) {
-
-//     console.log(name)
-//     for (let i = 0; i < overLayers.length; i++) {
-//         for (let L = 0; L < overLayers[i].layers.length; L++) {
-//             if (overLayers[i].layers[L].short_name == name) {
-//                 overLayers[i].layers[L].layer.addTo(map);                   // make sure layer is active
-//                 map.fitBounds(overLayers[i].layers[L].layer.getBounds()) // zoom to layer
-//                 break
-//             }
-//         }
-//     }
-// }
-
-// var layersList = []
-// updateLayersList()
-
-// swipeButton = document.getElementById('swipeMenu');
-// swipeButton.onclick = updateLayersListInSwipePanel()
-
 
 var browserControl = L.control.browserPrint({ position: 'topleft', title: 'Print Map' }).addTo(map);
-
-
-
-
-// function updateLayersList() {
-
-//     for (let i = 0; i < overLayers.length; i++) {
-//         for (let L = 0; L < overLayers[i].layers.length; L++) {
-//             layersList.push(overLayers[i].layers[L].short_name)
-//         }
-//     }
-//     console.log('Updated')
-// }
-
-// function updateLayersListInSwipePanel() {
-//     let leftPanel = document.getElementById("LeftLayerSelector");
-//     for (let i = 0; i < layersList.length; i++) {
-//         let option = document.createElement('option');
-//         option.text = layersList[i];
-//         leftPanel.appendChild(option)
-
-//     }
-
-// }
 
 
 
@@ -602,34 +558,13 @@ function getfullName(short_name, legend, attribution) {
 
     // Legend Image (if available)
     if (legend) {
-        summary.innerHTML += ` ${short_name} &#x25B6;`; // ▶ black right-pointing triangle
+        summary.innerHTML += ` ${short_name} &#x25B6;`; // ▶
 
         let legendHolder = L.DomUtil.create("img", "", details);
         legendHolder.setAttribute('src', legend);
         legendHolder.setAttribute('alt', 'Legend');
         legendHolder.setAttribute('style', 'margin-top: 4px; max-height: 500px; display: block;');
     }
-
-
-
-    // let infoIcon = L.DomUtil.create("img", "layer-info-img", details);
-    // infoIcon.alt = "\u{1F6C8}";
-    // infoIcon.title = "Attribution";
-    // // infoIcon.setAttribute("data-target", "#exampleModalCenter")
-    // // infoIcon.setAttribute('onclick', "alert('" + short_name + "')");
-    // infoIcon.setAttribute('onclick', "ShowAttribution('" + short_name + "," + attribution + "')");
-
-
-    // let legendHolder = L.DomUtil.create("img", "", details);
-    // legendHolder.setAttribute('src', legend);
-
-    // let ZoomToBtn = L.DomUtil.create("button", "Zoombtn", details);
-    // ZoomToBtn.setAttribute('type', "button");
-    // let ZoomToBtnIcon = L.DomUtil.create("img", "", ZoomToBtn);
-    // ZoomToBtnIcon.setAttribute('src', "./src/assets/magnifying-glass-location-solid.svg");
-    // ZoomToBtnIcon.setAttribute('title', "zoom to layer");
-    // // ZoomToBtn.innerText += 'onclick=ZoomToLayer("Geology")'
-    // ZoomToBtn.setAttribute('onclick', "ZoomToLayer('" + short_name + "')");
 
     return container.innerHTML
 }
@@ -643,18 +578,5 @@ function ShowAttribution(short_name, attribution) {
     let modalBody = document.getElementById("myModalBody")
     modalBody.innerHTML = attribution
 
-    // let modalContainer = document.getElementById(myModal)
-    // modalBody.modal('toggle');
-
     $('#myModal').modal('show')
-
-
-    console.log(short_name)
-    console.log(attribution)
-    // let modal = L.DomUtil.create("div")
-
-    // modal.innerHTML =
-    // '<div class="modal fade" id="exampleModalCenter" tabindex="-1" role="dialog" aria-labelledby="exampleModalCenterTitle" aria-hidden="true">  <div class="modal-dialog modal-dialog-centered" role="document">    <div class="modal-content">      <div class="modal-header">        <h5 class="modal-title" id="exampleModalLongTitle"></h5>        <button type="button" class="close" data-dismiss="modal" aria-label="Close">          <span aria-hidden="true">&times;</span>        </button>      </div>      <div class="modal-body"> </div>      <div class="modal-footer">        <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>      </div>    </div>  </div></div>'
-
-    // return modal
 }

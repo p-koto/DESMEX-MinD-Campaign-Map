@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2">
+<Document>
+<name>Erzgebirge_Gottesberg_Tx2</name>
+<Placemark><name>Tx2</name><ExtendedData><Data name="Name"><value>Tx2</value></Data><Data name="length"><value>3.62</value></Data><Data name="id"><value>2</value></Data></ExtendedData><LineString><tessellate>1</tessellate><coordinates>12.478009,50.441224,0 12.487055,50.435866,0 12.490406,50.433864,0 12.490505,50.433718,0 12.490491,50.433649,0 12.490794,50.433623,0 12.499848,50.428199,0 12.499938,50.428142,0 12.502976,50.425135,0 12.504187,50.423946,0 12.504093,50.423864,0 12.504123,50.423746,0 12.504339,50.423769,0 12.504518,50.423623,0 12.504574,50.423497,0 12.504185,50.422161,0 12.504054,50.422149,0 12.504029,50.422084,0 12.50413,50.421958,0 12.503357,50.419267,0 12.502494,50.416524,0 12.502283,50.41648,0 12.50171,50.416472,0</coordinates></LineString></Placemark>
+</Document>
+</kml>
