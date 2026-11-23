@@ -321,21 +321,39 @@ var panelLayers = new L.Control.PanelLayers(null, overLayers, {
 
 nestGroupsUnder(panelLayers, "Erzgebirge: Gottesberg", false);
 
+// Gruppentitel (EM Transmitters, Flights, Infrastructure) wie die <summary>-Reiter darstellen
+(function () {
+    const st = document.createElement('style');
+    st.id = 'panel-group-style';
+    st.textContent =
+        '.leaflet-panel-layers-group > .leaflet-panel-layers-title,' +
+        '.leaflet-panel-layers-group .leaflet-panel-layers-title {' +
+        '  font-size: inherit !important; font-weight: bold !important;' +
+        '  padding: 4px 6px !important; margin: 0 !important;' +
+        '  background: none !important; border: none !important;' +
+        '  border-bottom: 1px solid #ccc !important; cursor: pointer;' +
+        '}';
+    document.head.appendChild(st);
+})();
+
 
 
 // ---------- TFE-Menü (Flug -> Komponente -> Frequenz -> Anzeige) ----------
 const TFE_DIR = DATA_DIR + 'TFEs/';
 
 // Dateinamen-Schema: Flug_Komponente_Frequenz_Anzeige.kml
-const tfeFiles = [
-    'F1_BN_8Hz_abs.kml',
-    'F1_BE_8Hz_abs.kml',
-    'F1_BN_8Hz_phase.kml',
-    'F3A_BN_8Hz_abs.kml',
-    'F3A_BE_8Hz_abs.kml',
-    'F3A_BD_8Hz_abs.kml',
-    // ... weitere Dateien
-];
+const TFE_FLIGHTS = ['F1', 'F2', 'F3', 'F4', 'F5', 'F6'];
+const TFE_COMPS   = ['BN', 'BE', 'BD'];
+const TFE_FREQS   = [24, 64, 128, 256, 512, 1024, 2048, 4096];   // in Hz
+const TFE_DISPS   = ['abs', 'phase'];
+
+const tfeFiles = TFE_FLIGHTS.flatMap(flight =>
+    TFE_FREQS.flatMap(freq =>
+        TFE_DISPS.flatMap(disp =>
+            TFE_COMPS.map(comp => `${flight}_${comp}_${freq}Hz_${disp}.kml`)
+        )
+    )
+);
 
 const tfeLayers = {};   // Dateiname -> L.layerGroup
 
@@ -383,13 +401,25 @@ function makeTfeGroup(title, childEls) {
 }
 
 function makeTfeToggle(label, file) {
+    const row = document.createElement('div');
+    row.style.cssText = 'display:flex;justify-content:space-between;align-items:center;gap:8px;';
+
     const l = document.createElement('label');
-    l.style.display = 'block';
+    l.style.flex = '1';
     const cb = document.createElement('input');
     cb.type = 'checkbox';
     cb.addEventListener('change', () => toggleTfe(file, cb.checked));
     l.append(cb, ' ' + label);
-    return l;
+
+    const dl = document.createElement('a');
+    dl.href = TFE_DIR + file;
+    dl.download = file;
+    dl.title = file + ' herunterladen';
+    dl.innerHTML = '<i class="fa fa-download"></i>';
+    dl.style.cssText = 'color:#555;text-decoration:none;font-size:12px;';
+
+    row.append(l, dl);
+    return row;
 }
 
 function buildTfeMenu(files) {
@@ -424,45 +454,215 @@ function buildTfeMenu(files) {
 
 
 // ---------- KML-Download ----------
-function downloadKml(layerEntry) {
+function downloadUrl(url) {
     const a = document.createElement('a');
-    a.href = layerEntry.url;
-    a.download = layerEntry.url.split('/').pop();   // z. B. Erzgebirge_Gottesberg_F1.kml
+    a.href = url;
+    a.download = url.split('/').pop();
     document.body.appendChild(a);
     a.click();
     a.remove();
 }
 
-// Leaflet-Control: Dropdown (nach Rubrik gruppiert) + Download-Button
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+// Mehrere Dateien nacheinander laden (kleine Pause, damit der Browser nicht blockt)
+async function downloadMany(urls) {
+    for (const url of urls) {
+        downloadUrl(url);
+        await sleep(500);
+    }
+}
+
+// Optional: als ZIP (nur wenn JSZip eingebunden ist)
+async function downloadAsZip(urls, zipName) {
+    const zip = new JSZip();
+    await Promise.all(urls.map(async url => {
+        const r = await fetch(url);
+        if (!r.ok) throw new Error(r.status + ' ' + url);
+        zip.file(url.split('/').pop(), await r.blob());
+    }));
+    const blob = await zip.generateAsync({ type: 'blob' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = zipName;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+}
+
+// Gruppe im Dialog: <details> mit "alle auswählen"-Checkbox in der Summary
+function makeDlGroup(title, childEls, open) {
+    const d = document.createElement('details');
+    d.open = !!open;
+    const s = document.createElement('summary');
+    s.style.cssText = 'cursor:pointer;padding:3px 0;';
+    const all = document.createElement('input');
+    all.type = 'checkbox';
+    all.style.marginRight = '6px';
+    all.addEventListener('click', e => e.stopPropagation());
+    all.addEventListener('change', () => {
+        d.querySelectorAll('input.kml-dl-cb').forEach(cb => cb.checked = all.checked);
+        d.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+    s.append(all, title);
+    d.appendChild(s);
+    const inner = document.createElement('div');
+    inner.style.marginLeft = '18px';
+    childEls.forEach(el => inner.appendChild(el));
+    d.appendChild(inner);
+    return d;
+}
+
+function makeDlItem(label, url) {
+    const l = document.createElement('label');
+    l.style.display = 'block';
+    const cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.className = 'kml-dl-cb';
+    cb.dataset.url = url;
+    cb.style.marginRight = '6px';
+    l.append(cb, label);
+    return l;
+}
+
+function buildDownloadList() {
+    const wrap = document.createElement('div');
+
+    // Normale Gruppen (EM Transmitters, Flights, Infrastructure)
+    overLayers.forEach(g => {
+        wrap.appendChild(makeDlGroup(
+            g.group,
+            g.layers.map(l => makeDlItem(l.short_name, l.url)),
+            false
+        ));
+    });
+
+    // TFEs: Flug -> Komponente -> Frequenz -> Anzeige
+    const tree = buildTfeTree(tfeFiles);
+    const keys = o => Object.keys(o).sort(natSort);
+    const flights = keys(tree).map(flight =>
+        makeDlGroup(flight, keys(tree[flight]).map(comp =>
+            makeDlGroup(comp, keys(tree[flight][comp]).map(freq =>
+                makeDlGroup(freq, keys(tree[flight][comp][freq]).map(disp =>
+                    makeDlItem(disp, TFE_DIR + tree[flight][comp][freq][disp])
+                ), false)
+            ), false)
+        ), false)
+    );
+    wrap.appendChild(makeDlGroup('TFEs', flights, false));
+    return wrap;
+}
+
+function openKmlDownloadDialog() {
+    if (document.getElementById('kml-dl-overlay')) return;
+
+    const overlay = document.createElement('div');
+    overlay.id = 'kml-dl-overlay';
+    overlay.style.cssText =
+        'position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:10000;' +
+        'display:flex;align-items:center;justify-content:center;';
+
+    const box = document.createElement('div');
+    box.style.cssText =
+        'background:#fff;border-radius:6px;width:min(520px,92vw);max-height:80vh;' +
+        'display:flex;flex-direction:column;box-shadow:0 4px 20px rgba(0,0,0,.3);font:13px/1.4 sans-serif;';
+
+    // Kopf
+    const head = document.createElement('div');
+    head.style.cssText = 'display:flex;justify-content:space-between;align-items:center;padding:10px 14px;border-bottom:1px solid #ccc;';
+    head.innerHTML = '<strong style="font-size:15px;">KML-Download</strong>';
+    const closeBtn = document.createElement('button');
+    closeBtn.type = 'button';
+    closeBtn.textContent = '✕';
+    closeBtn.style.cssText = 'border:none;background:none;font-size:16px;cursor:pointer;';
+    head.appendChild(closeBtn);
+
+    // Liste
+    const body = document.createElement('div');
+    body.style.cssText = 'overflow:auto;padding:10px 14px;';
+    body.appendChild(buildDownloadList());
+
+    // Fuß
+    const foot = document.createElement('div');
+    foot.style.cssText = 'display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:10px 14px;border-top:1px solid #ccc;';
+    const btnAll  = document.createElement('button');
+    const btnNone = document.createElement('button');
+    const btnGo   = document.createElement('button');
+    [btnAll, btnNone, btnGo].forEach(b => b.type = 'button');
+    btnAll.textContent  = 'Alle';
+    btnNone.textContent = 'Keine';
+    btnGo.style.cssText = 'margin-left:auto;font-weight:bold;';
+    foot.append(btnAll, btnNone);
+
+    let zipCb = null;
+    if (typeof JSZip !== 'undefined') {
+        const zl = document.createElement('label');
+        zipCb = document.createElement('input');
+        zipCb.type = 'checkbox';
+        zipCb.checked = true;
+        zl.append(zipCb, ' als ZIP');
+        foot.appendChild(zl);
+    }
+    foot.appendChild(btnGo);
+
+    const selected = () => [...body.querySelectorAll('input.kml-dl-cb:checked')].map(cb => cb.dataset.url);
+    const refresh = () => {
+        const n = selected().length;
+        btnGo.textContent = `Herunterladen (${n})`;
+        btnGo.disabled = n === 0;
+    };
+    refresh();
+
+    body.addEventListener('change', refresh);
+    const setAll = v => {
+        body.querySelectorAll('input[type=checkbox]').forEach(cb => cb.checked = v);
+        refresh();
+    };
+    btnAll.onclick  = () => setAll(true);
+    btnNone.onclick = () => setAll(false);
+
+    btnGo.onclick = async () => {
+        const urls = selected();
+        if (!urls.length) return;
+        btnGo.disabled = true;
+        try {
+            if (zipCb && zipCb.checked && urls.length > 1) {
+                await downloadAsZip(urls, 'KMLs.zip');
+            } else {
+                await downloadMany(urls);
+            }
+        } catch (err) {
+            console.warn('Download fehlgeschlagen:', err);
+            notification.alert('Error', 'Download fehlgeschlagen');
+        }
+        refresh();
+    };
+
+    const close = () => { overlay.remove(); document.removeEventListener('keydown', onKey); };
+    const onKey = e => { if (e.key === 'Escape') close(); };
+    closeBtn.onclick = close;
+    overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
+    document.addEventListener('keydown', onKey);
+
+    box.append(head, body, foot);
+    overlay.appendChild(box);
+    document.body.appendChild(overlay);
+}
+
+// Leaflet-Control: ein Button, der den Download-Dialog öffnet
 L.Control.KmlDownload = L.Control.extend({
     options: { position: 'topright' },
 
     onAdd: function () {
         const div = L.DomUtil.create('div', 'leaflet-bar kml-download');
-        div.style.cssText = 'background:#fff;padding:6px;display:flex;gap:4px;align-items:center;';
-
-        const select = L.DomUtil.create('select', '', div);
-        overLayers.forEach((group, gi) => {
-            const og = document.createElement('optgroup');
-            og.label = group.group;
-            group.layers.forEach((l, li) => {
-                const opt = document.createElement('option');
-                opt.value = gi + ':' + li;
-                opt.textContent = l.short_name;
-                og.appendChild(opt);
-            });
-            select.appendChild(og);
-        });
+        div.style.cssText = 'background:#fff;padding:6px;';
 
         const btn = L.DomUtil.create('button', '', div);
         btn.type = 'button';
-        btn.title = 'Als KML herunterladen';
-        btn.innerHTML = '<i class="fa fa-download"></i> KML';
-
-        btn.onclick = () => {
-            const [gi, li] = select.value.split(':').map(Number);
-            downloadKml(overLayers[gi].layers[li]);
-        };
+        btn.title = 'KMLs herunterladen';
+        btn.innerHTML = '<i class="fa fa-download"></i> KML-Download';
+        btn.onclick = openKmlDownloadDialog;
 
         L.DomEvent.disableClickPropagation(div);
         return div;
